@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Yearly Habit Tracker – Calendar View (Persistent)</title>
+  <style>
+    /* Basic Reset & Dark Mode Base Styles */
+    body {
+      margin: 0;
+      padding: 20px;
+      background-color: #121212;
+      color: #e0e0e0;
+      font-family: sans-serif;
+      /* Center everything horizontally */
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    /* Outer wrapper centers the container */
+    .wrapper {
+      width: 100%;
+      text-align: center;
+    }
+    /* Container: inline-block so that width is based on content,
+       with a max-width for very large screens */
+    .container {
+      display: inline-block;
+      vertical-align: top;
+      width: auto;
+      max-width: 95%;
+      padding: 20px;
+      background: #1e1e1e;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    }
+    /* Common Controls */
+    .controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 20px;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      background-color: #333;
+      color: #e0e0e0;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background-color: #444;
+    }
+    .instruction {
+      font-size: 0.9em;
+    }
+    /* We want the table to auto-size (no forced scrollbars) */
+    .table-container {
+      width: auto;
+    }
+    /* Tracker Table Styles (Calendar Layout) */
+    table {
+      width: 100%;
+      table-layout: auto;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    table, th, td {
+      border: 1px solid #333;
+    }
+    th, td {
+      padding: 8px;
+      text-align: center;
+      position: relative;
+    }
+    th {
+      background-color: #2a2a2a;
+    }
+    /* Header row: first cell "Habit" then day numbers */
+    table thead th.day-header {
+      font-weight: bold;
+    }
+    /* Editable habit name cell (first cell in each row) */
+    table tbody td.habit-name {
+      background-color: #333;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    table tbody td.habit-name input {
+      width: auto;
+      border: none;
+      background: transparent;
+      color: #e0e0e0;
+      font-weight: bold;
+      text-align: center;
+    }
+    table tbody td.habit-name input:focus {
+      outline: none;
+    }
+    /* Checkbox cell for each day */
+    .checkbox-cell input[type="checkbox"] {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #555;
+      border-radius: 4px;
+      background-color: transparent;
+      cursor: pointer;
+      position: relative;
+    }
+    /* Centered Yellow Checkmark */
+    .checkbox-cell input[type="checkbox"]:checked {
+      border-color: yellow;
+    }
+    .checkbox-cell input[type="checkbox"]:checked::after {
+      content: '✔';
+      color: yellow;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 16px;
+    }
+    /* Reflection and Review Sections */
+    .reflection, .review {
+      margin: 20px 0;
+    }
+    textarea {
+      width: 100%;
+      height: 80px;
+      padding: 8px;
+      background-color: #333;
+      color: #e0e0e0;
+      border: 1px solid #555;
+      border-radius: 4px;
+      resize: vertical;
+    }
+    /* Tabs at Bottom */
+    .tabs {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 20px;
+    }
+    .tab-btn {
+      background-color: #333;
+      border: 1px solid #555;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      color: #e0e0e0;
+    }
+    .tab-btn.active {
+      background-color: yellow;
+      color: #121212;
+    }
+    @media screen and (max-width: 600px) {
+      table, th, td {
+        font-size: 12px;
+      }
+      textarea {
+        height: 60px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <h1>Yearly Habit Tracker – Calendar View</h1>
+      <!-- Common Controls (affect active month) -->
+      <div class="controls">
+        <button class="btn" onclick="addHabit()">+ Add Habit</button>
+        <span class="instruction">Use <strong>Ctrl+Z</strong> to undo last habit addition.</span>
+      </div>
+
+      <!-- Tracker Container: Active Month's Tracker will be injected here -->
+      <div id="trackerContainer"></div>
+
+      <!-- Tabs for Months -->
+      <div class="tabs" id="tabsContainer"></div>
+    </div>
+  </div>
+
+  <script>
+    // Global Variables
+    const months = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    // Days per month (non-leap year)
+    const monthDays = {
+      'January': 31,
+      'February': 28,
+      'March': 31,
+      'April': 30,
+      'May': 31,
+      'June': 30,
+      'July': 31,
+      'August': 31,
+      'September': 30,
+      'October': 31,
+      'November': 30,
+      'December': 31
+    };
+
+    let currentMonthIndex = 0; // default to January
+
+    // Function to generate the entire month tracker DOM element
+    function generateMonthTracker(monthName) {
+      const trackerDiv = document.createElement('div');
+      trackerDiv.classList.add('month-tracker');
+      trackerDiv.id = "tracker-" + monthName;
+      trackerDiv.style.display = "none"; // hide until selected
+
+      // Month heading
+      const monthHeading = document.createElement('h2');
+      monthHeading.textContent = monthName;
+      trackerDiv.appendChild(monthHeading);
+
+      // Table wrapper (no scrollbars; table auto-sizes)
+      const tableWrapper = document.createElement('div');
+      tableWrapper.classList.add('table-container');
+
+      // Create table
+      const table = document.createElement('table');
+      table.id = "table-" + monthName;
+
+      // Table header: first cell "Habit" then day numbers
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      const habitHeader = document.createElement('th');
+      habitHeader.textContent = "Habit";
+      headerRow.appendChild(habitHeader);
+      const days = monthDays[monthName] || 31;
+      for (let day = 1; day <= days; day++) {
+        const dayHeader = document.createElement('th');
+        dayHeader.classList.add('day-header');
+        dayHeader.textContent = day;
+        headerRow.appendChild(dayHeader);
+      }
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      // Table body: create 4 default habit rows
+      const tbody = document.createElement('tbody');
+      for (let i = 1; i <= 4; i++) {
+        const row = createHabitRow(monthName, i);
+        tbody.appendChild(row);
+      }
+      table.appendChild(tbody);
+      tableWrapper.appendChild(table);
+      trackerDiv.appendChild(tableWrapper);
+
+      // Weekly Reflection Section
+      const reflectionDiv = document.createElement('div');
+      reflectionDiv.classList.add('reflection');
+      reflectionDiv.innerHTML = `
+        <h2>Weekly Reflection</h2>
+        <p><strong>What went well this week?</strong></p>
+        <textarea placeholder="Write your thoughts..."></textarea>
+        <p><strong>What challenges did I face?</strong></p>
+        <textarea placeholder="Write your challenges..."></textarea>
+        <p><strong>What improvements can I make next week?</strong></p>
+        <textarea placeholder="Write your improvements..."></textarea>
+      `;
+      trackerDiv.appendChild(reflectionDiv);
+
+      // Monthly Review Section
+      const reviewDiv = document.createElement('div');
+      reviewDiv.classList.add('review');
+      reviewDiv.innerHTML = `
+        <h2>Monthly Review</h2>
+        <p><strong>Key Wins:</strong></p>
+        <textarea placeholder="Write your key wins..."></textarea>
+        <p><strong>Areas for Improvement:</strong></p>
+        <textarea placeholder="Write areas for improvement..."></textarea>
+        <p><strong>Adjustments for Next Month:</strong></p>
+        <textarea placeholder="Write your adjustments..."></textarea>
+      `;
+      trackerDiv.appendChild(reviewDiv);
+
+      // Attach change listeners for auto-saving later
+      attachListeners(trackerDiv);
+
+      return trackerDiv;
+    }
+
+    // Helper function to create a habit row for a given month.
+    function createHabitRow(monthName, habitNumber) {
+      const days = monthDays[monthName] || 31;
+      const row = document.createElement('tr');
+
+      // Habit name cell (editable)
+      const habitNameCell = document.createElement('td');
+      habitNameCell.classList.add('habit-name');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = 'Habit ' + habitNumber;
+      habitNameCell.appendChild(input);
+      row.appendChild(habitNameCell);
+
+      // Create one checkbox cell per day
+      for (let day = 1; day <= days; day++) {
+        const cell = document.createElement('td');
+        cell.classList.add('checkbox-cell');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        cell.appendChild(checkbox);
+        row.appendChild(cell);
+      }
+
+      // Attach change listeners for auto-saving
+      attachListeners(row);
+      return row;
+    }
+
+    // Attach an event listener to every input, textarea, and checkbox inside a given element
+    function attachListeners(element) {
+      const inputs = element.querySelectorAll('input, textarea');
+      inputs.forEach(input => {
+        input.addEventListener('input', saveData);
+        input.addEventListener('change', saveData);
+      });
+    }
+
+    // Build all month trackers and add them to the tracker container
+    function buildAllTrackers() {
+      const trackerContainer = document.getElementById('trackerContainer');
+      months.forEach(monthName => {
+        const tracker = generateMonthTracker(monthName);
+        trackerContainer.appendChild(tracker);
+      });
+    }
+
+    // Build month tabs at the bottom
+    function buildTabs() {
+      const tabsContainer = document.getElementById('tabsContainer');
+      months.forEach((monthName, index) => {
+        const tabBtn = document.createElement('button');
+        tabBtn.classList.add("tab-btn");
+        tabBtn.id = "tab-" + monthName;
+        tabBtn.textContent = monthName;
+        tabBtn.onclick = () => showMonth(index);
+        tabsContainer.appendChild(tabBtn);
+      });
+    }
+
+    // Show a month tracker based on its index
+    function showMonth(index) {
+      currentMonthIndex = index;
+      months.forEach(month => {
+        const tracker = document.getElementById("tracker-" + month);
+        tracker.style.display = "none";
+      });
+      const tabButtons = document.querySelectorAll(".tab-btn");
+      tabButtons.forEach(btn => btn.classList.remove("active"));
+
+      const selectedMonth = months[index];
+      const activeTracker = document.getElementById("tracker-" + selectedMonth);
+      activeTracker.style.display = "block";
+      document.getElementById("tab-" + selectedMonth).classList.add("active");
+    }
+
+    // Save all tracker data to localStorage
+    function saveData() {
+      const data = {};
+      months.forEach(month => {
+        const monthData = {};
+        const tracker = document.getElementById("tracker-" + month);
+        if (!tracker) return;
+        // Save table data
+        const table = tracker.querySelector("table");
+        if (table) {
+          const tbody = table.querySelector("tbody");
+          const rows = tbody.querySelectorAll("tr");
+          monthData.habits = [];
+          rows.forEach(row => {
+            const habit = {};
+            // First cell: habit name
+            const habitNameInput = row.querySelector("td.habit-name input");
+            habit.name = habitNameInput.value;
+            // Following cells: checkbox states
+            habit.days = [];
+            const checkboxCells = row.querySelectorAll("td.checkbox-cell input[type='checkbox']");
+            checkboxCells.forEach(cb => {
+              habit.days.push(cb.checked);
+            });
+            monthData.habits.push(habit);
+          });
+        }
+        // Save Weekly Reflection texts
+        const reflection = tracker.querySelector(".reflection");
+        if (reflection) {
+          const textareas = reflection.querySelectorAll("textarea");
+          monthData.reflection = {
+            wentWell: textareas[0].value,
+            challenges: textareas[1].value,
+            improvements: textareas[2].value
+          };
+        }
+        // Save Monthly Review texts
+        const review = tracker.querySelector(".review");
+        if (review) {
+          const textareas = review.querySelectorAll("textarea");
+          monthData.review = {
+            keyWins: textareas[0].value,
+            areas: textareas[1].value,
+            adjustments: textareas[2].value
+          };
+        }
+        data[month] = monthData;
+      });
+      localStorage.setItem("trackerData", JSON.stringify(data));
+    }
+
+    // Load saved data from localStorage and update the DOM
+    function loadData() {
+      const saved = localStorage.getItem("trackerData");
+      if (!saved) return;
+      const data = JSON.parse(saved);
+      months.forEach(month => {
+        const monthData = data[month];
+        if (!monthData) return;
+        const tracker = document.getElementById("tracker-" + month);
+        if (!tracker) return;
+        // Update table data
+        const table = tracker.querySelector("table");
+        if (table && monthData.habits) {
+          const tbody = table.querySelector("tbody");
+          // Clear existing rows and rebuild based on saved habits
+          tbody.innerHTML = "";
+          monthData.habits.forEach((habit, index) => {
+            const row = createHabitRow(month, index + 1);
+            // Set habit name
+            const habitInput = row.querySelector("td.habit-name input");
+            habitInput.value = habit.name;
+            // Set checkbox states
+            const checkboxes = row.querySelectorAll("td.checkbox-cell input[type='checkbox']");
+            habit.days.forEach((checked, i) => {
+              if (checkboxes[i]) {
+                checkboxes[i].checked = checked;
+              }
+            });
+            tbody.appendChild(row);
+          });
+        }
+        // Update Reflection texts
+        const reflection = tracker.querySelector(".reflection");
+        if (reflection && monthData.reflection) {
+          const textareas = reflection.querySelectorAll("textarea");
+          textareas[0].value = monthData.reflection.wentWell || "";
+          textareas[1].value = monthData.reflection.challenges || "";
+          textareas[2].value = monthData.reflection.improvements || "";
+        }
+        // Update Review texts
+        const review = tracker.querySelector(".review");
+        if (review && monthData.review) {
+          const textareas = review.querySelectorAll("textarea");
+          textareas[0].value = monthData.review.keyWins || "";
+          textareas[1].value = monthData.review.areas || "";
+          textareas[2].value = monthData.review.adjustments || "";
+        }
+      });
+    }
+
+    // Add a new habit row to the active month's tracker
+    function addHabit() {
+      const activeMonth = months[currentMonthIndex];
+      const tbody = document.querySelector(`#table-${activeMonth} tbody`);
+      const currentHabitCount = tbody.rows.length;
+      const newRow = createHabitRow(activeMonth, currentHabitCount + 1);
+      tbody.appendChild(newRow);
+      saveData();
+    }
+
+    // Remove the last habit row from the active month's tracker
+    function undoHabit() {
+      const activeMonth = months[currentMonthIndex];
+      const tbody = document.querySelector(`#table-${activeMonth} tbody`);
+      if (tbody.rows.length > 1) {
+        tbody.deleteRow(tbody.rows.length - 1);
+        saveData();
+      }
+    }
+
+    // Global event listener for Ctrl+Z to undo last habit addition
+    document.addEventListener('keydown', function(event) {
+      if (event.ctrlKey && (event.key === 'z' || event.key === 'Z')) {
+        event.preventDefault();
+        undoHabit();
+      }
+    });
+
+    // Global event listener: save data on every input or change event anywhere
+    document.addEventListener('input', saveData);
+    document.addEventListener('change', saveData);
+
+    // Build trackers and tabs, then load saved data (if any)
+    buildAllTrackers();
+    buildTabs();
+    showMonth(0);
+    loadData();
+  </script>
+</body>
+</html>
